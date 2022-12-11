@@ -4,15 +4,16 @@ substitutions:
 # --------------------------
 # name that will appear in esphome and homeassistant.
   name: jk-bms-can
+  device_description: "Adapter between JK-BMS and Inverter"
 # --------------------------
 # Number of Battery modules max 8. Each LX U5.4-L battery is 5.4kWh, select the number closest to your capactiy eg 3.2V * 280Ah * 16 = 14.3kWh
-  batt_modules: "3"
+  batt_modules: "2"
 # --------------------------------------
 # Battery Charging setting:
 # This is max charging amps eg 50A, for Bulk - Constant Current charging(CC), should be at least 10A less than BMS change current protection, 0.5C max 
-  charge_a: "50"
+  charge_a: "40"
 # Absorption Voltage for Constant Voltage charging(CV). This is Absorption voltage you want the inverter to change with 55.2 eg 3.45v/cell for 16 cells 48V battery. 
-  absorption_v: "55.2"
+  absorption_v: "56"              # 4.00 x 14 = 56
 # Absorption time in minutes to hold charge voltage after charge voltage is reached eg 30
   absorption_time: "30"
 # Rebulk offset, x Volts below absorption volatge battery will request rebulk, eg 55.2-3 = 52.5v, roughly 90% SOC.
@@ -20,9 +21,9 @@ substitutions:
 # --------------------------------------
 # Battery Discharge setting:
 # Max discharge amps eg 100, should be at least 10A less than BMS over dischange current protection, 0.5C max
-  discharge_a: "100"
+  discharge_a: "40"
 # Minimum discharge voltage eg 48v/16 = 3V per cell
-  min_dischange_v: "48"
+  min_dischange_v: "45.5"         # 3.25 x 14 = 45.5
 # --------------------------------------
 # Battery State of Health (SOH) setting:
 # Maximum charging cycles is used to calculate the battey SOH, LF280K=6000.0 LF280=3000.0 (decimal is required)
@@ -37,10 +38,11 @@ substitutions:
   rx_pin: GPIO16
 # --------------------------------------
 #### Don't make changes below this ####
-  external_components_source: github://uksa007/esphome-jk-bms-can@main
+  external_components_source: github://stuuno/esphome-jk-bms-can@main
 
 esphome:
   name: ${name}
+  comment: ${device_description}
   on_boot:
     then:
       - switch.turn_on: inverter_charging
@@ -84,23 +86,33 @@ logger:
 # if you use Home Assistant. The native API is more lightweight.
 api:
 
-# mqtt:
-#  broker: !secret mqtt_host
-#  username: !secret mqtt_username
-#  password: !secret mqtt_password
-#  id: mqtt_client
+mqtt:
+  broker: !secret mqtt_host
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  id: mqtt_client
+  topic_prefix: "emon/esphome"
+
 
 output:
   - platform: gpio
     pin: 2
     id: led
     inverted: true
+  - platform: gpio
+    pin: 21
+    id: led2
 
 light:
   - platform: binary
     output: led
     id: led_buitin
     name: "Builtin LED"
+    internal: true
+  - platform: binary
+    output: led2
+    id: led_ext
+    name: "External LED"
     internal: true
 
 uart:
@@ -109,6 +121,8 @@ uart:
   rx_buffer_size: 384
   tx_pin: ${tx_pin}
   rx_pin: ${rx_pin}
+#  debug:
+#    direction: BOTH
 
 jk_modbus:
   id: modbus0
@@ -138,45 +152,52 @@ canbus:
 interval:
   - interval: 1000ms
     then:
+      - light.turn_on:
+          id: led_ext
+
       - canbus.send: # Warning, Alarms
           can_id: 0x359
           data: !lambda |-
             uint8_t can_mesg[] = {0, 0};
             uint16_t jk_errormask = id(errors_bitmask).state;
             int batt_mods = ${batt_modules};
+
             /// Alarms
             if ((jk_errormask & 0x04) | (jk_errormask & 0x80) | (jk_errormask & 0x400)) { /// Hight.Voltage.Alarm JK bit 2,7,10 
-               can_mesg[0] = 0x02; /// bit 1
+               can_mesg[0] = 0x02;                                                        /// bit 1
             }
-            if ((jk_errormask & 0x08) | (jk_errormask & 0x800)) { ///Low.Voltage.Alarm JK bit 3,11 
-               can_mesg[0] = can_mesg[0] | 0x04; /// bit 2
+            if ((jk_errormask & 0x08) | (jk_errormask & 0x800)) {                         /// Low.Voltage.Alarm JK bit 3,11 
+               can_mesg[0] = can_mesg[0] | 0x04;                                          /// bit 2
             }
-            if ((jk_errormask & 0x02) | (jk_errormask & 0x10) | (jk_errormask & 0x100)) { //Hight.Temp.Alarm JK bit 1,4,8
-               can_mesg[0] = can_mesg[0] | 0x08; /// bit 3
+            if ((jk_errormask & 0x02) | (jk_errormask & 0x10) | (jk_errormask & 0x100)) { /// Hight.Temp.Alarm JK bit 1,4,8
+               can_mesg[0] = can_mesg[0] | 0x08;                                          /// bit 3
             }
-            if (jk_errormask & 0x200) { ///Low.Temp.Alarm JK bit 9
-               can_mesg[0] = can_mesg[0] | 0x10; /// bit 4
+            if (jk_errormask & 0x200) {                                                   /// Low.Temp.Alarm JK bit 9
+               can_mesg[0] = can_mesg[0] | 0x10;                                          /// bit 4
             }
-            if (jk_errormask & 0x40) { ///Discharge.Over.Current JK bit 6
-               can_mesg[0] = can_mesg[0] | 0x80; /// bit 7
+            if (jk_errormask & 0x40) {                                                    /// Discharge.Over.Current JK bit 6
+               can_mesg[0] = can_mesg[0] | 0x80;                                          /// bit 7
             }
-            if (jk_errormask & 0x20) { ///Charge.Over.Current JK bit 5
-               can_mesg[1] = 0x01; /// bit 0
+            if (jk_errormask & 0x20) {                                                    /// Charge.Over.Current JK bit 5
+               can_mesg[1] = 0x01;                                                        /// bit 0
             }
-            if ((jk_errormask & 0x1000) | (jk_errormask & 0x2000)) { /// BMS Internal JK bit 12,13
-               can_mesg[1] = can_mesg[1] | 0x08; /// bit 3
+            if ((jk_errormask & 0x1000) | (jk_errormask & 0x2000)) {                      /// BMS Internal JK bit 12,13
+               can_mesg[1] = can_mesg[1] | 0x08;                                          /// bit 3
             }
-            if (jk_errormask & 0x80) { /// Cell Imbalance JK bit 7
-               can_mesg[1] = can_mesg[1] | 0x10; /// bit 4 
+            if (jk_errormask & 0x80) {                                                    /// Cell Imbalance JK bit 7
+               can_mesg[1] = can_mesg[1] | 0x10;                                          /// bit 4 
             }
+
             /// Warnings
             can_mesg[2] = 0x00;
-            can_mesg[3] = 0x00; /// test
+            can_mesg[3] = 0x00;                                                           /// test
+
             /// Flags
-            can_mesg[4] = batt_mods; ///Module in parallel
+            can_mesg[4] = batt_mods;                                                      /// Module in parallel
             can_mesg[5] = 0x00;
             can_mesg[6] = 0x00;
-            can_mesg[7] = 0x00; ///DIP switches 1,3 10000100 0x84
+            can_mesg[7] = 0x00;                                                           /// DIP switches 1,3 10000100 0x84
+
             ESP_LOGI("main", "send can id: 0x359 hex: %x %x %x %x %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]);
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]};
       - delay: 10ms
@@ -189,18 +210,22 @@ interval:
                id(charge_status) = "Disabled";
             } else if (id(inverter_chg_on).state) {
                 id(charge_status) = "Bulk Manually";
-            } else if ((id(charging_switch).state) & (id(inverter_charging).state) & (id(charge_status) == "Disabled")) {
+            } else if ((id(charging_switch).state) 
+                    & (id(inverter_charging).state) 
+                    & (id(charge_status) == "Disabled")) {
                id(charge_status) = "Wait";
-            } else if ((!id(inverter_chg_on).state) & (id(charge_status) == "Bulk Manually")) {
+            } else if ((!id(inverter_chg_on).state) 
+                    & (id(charge_status) == "Bulk Manually")) {
                id(charge_status) = "Wait";
-            } else if (id(total_voltage).state <= (id(charging_voltage).state - ${rebulk_offset})) { ///Bulk Charge eg 53.6v 10% 
+            } else if (id(total_voltage).state <= (id(charging_voltage).state - ${rebulk_offset})) {  /// Bulk Charge eg 53.6v 10% 
                 if (id(absorption_script).is_running()) id(absorption_script).stop();
                 id(charge_status) = "Bulk";
-            } else if ((id(total_voltage).state > (id(charging_voltage).state - ${rebulk_offset})) & (id(total_voltage).state < (id(charging_voltage).state - 0.05))) { ///If in startup rebulk
+            } else if ((id(total_voltage).state > (id(charging_voltage).state - ${rebulk_offset})) 
+                    & (id(total_voltage).state < (id(charging_voltage).state - 0.05))) {              /// If in startup rebulk
                      if (id(charge_status) == "Startup") {
-                        id(charge_status) = "Bulk"; /// If in startup, 10% low rebulk
+                        id(charge_status) = "Bulk";                                                   /// If in startup, 10% low rebulk
                      }
-            } else if (id(total_voltage).state >= (id(charging_voltage).state  - 0.05)) { ///10 % from top start absorption timer
+            } else if (id(total_voltage).state >= (id(charging_voltage).state  - 0.05)) {             /// 10 % from top start absorption timer
                      if (id(charge_status) == "Bulk") {
                         id(charge_status) = "Absorption";
                         if (!id(absorption_script).is_running()) id(absorption_script).execute();
@@ -208,7 +233,10 @@ interval:
             } else {
                 id(charge_status) = "Wait";
             }
-            if ((id(charge_status) == "Bulk") | (id(charge_status) == "Absorption") | (id(inverter_chg_on).state)) {
+
+            if ((id(charge_status) == "Bulk") 
+              | (id(charge_status) == "Absorption") 
+              | (id(inverter_chg_on).state)) {
                can_mesg[0] = uint16_t(id(charging_voltage).state * 10) & 0xff;
                can_mesg[1] = uint16_t(id(charging_voltage).state * 10) >> 8 & 0xff;
                can_mesg[2] = uint16_t(id(charging_current).state * 10) & 0xff;
@@ -219,22 +247,29 @@ interval:
                can_mesg[2] = 0;
                can_mesg[3] = 0;
             }
-            if ((!id(charging_switch).state) | (!id(inverter_charging).state)) { /// Overides to disable charging
+
+            if ((!id(charging_switch).state) 
+              | (!id(inverter_charging).state)) {                                                     /// Overides to disable charging
                can_mesg[0] = 0;
                can_mesg[1] = 0;
                can_mesg[2] = 0;
                can_mesg[3] = 0;
             }
-            if ((id(discharging_switch).state) & (id(inverter_discharging).state)) {
+
+            if ((id(discharging_switch).state) 
+              & (id(inverter_discharging).state)) {
               can_mesg[4] = uint16_t(${discharge_a} * 10) & 0xff;
               can_mesg[5] = uint16_t(${discharge_a} * 10) >> 8 & 0xff;
             } else {
                can_mesg[4] = 0x00;
                can_mesg[5] = 0x00;
             }
+
             can_mesg[6] = uint16_t(${min_dischange_v} * 10) & 0xff;
             can_mesg[7] = uint16_t(${min_dischange_v} * 10) >> 8 & 0xff;
+
             id(charging_status).publish_state(id(charge_status));
+
             ESP_LOGI("main", "send can id: 0x351 hex: %x %x %x %x %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]);
             ESP_LOGI("main", "send can id: Charge Status %s", id(charge_status).c_str());
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]};
@@ -245,10 +280,13 @@ interval:
           data: !lambda |-
             int soh = round(((id(charging_cycles).state/${max_cycles})-1)*-100);
             uint8_t can_mesg[3];
-            can_mesg[0] = uint16_t(id(capacity_remaining).state) & 0xff; /// 15 & 0xff; 
-            can_mesg[1] = uint16_t(id(capacity_remaining).state) >> 8 & 0xff; /// 15 >> 8 & 0xff; 
+
+            can_mesg[0] = uint16_t(id(capacity_remaining).state) & 0xff;        /// 15 & 0xff; 
+            can_mesg[1] = uint16_t(id(capacity_remaining).state) >> 8 & 0xff;   /// 15 >> 8 & 0xff; 
+
             can_mesg[2] = soh & 0xff;
             can_mesg[3] = soh >> 8 & 0xff;
+
             ESP_LOGI("main", "send can id: 0x355 hex: %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3]);
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3]};
       - delay: 10ms
@@ -259,10 +297,13 @@ interval:
             uint8_t can_mesg[5];
             can_mesg[0] = uint16_t(id(total_voltage).state * 100) & 0xff; 
             can_mesg[1] = uint16_t(id(total_voltage).state * 100) >> 8 & 0xff;
+
             can_mesg[2] = int16_t(id(current).state * 10) & 0xff;
             can_mesg[3] = int16_t(id(current).state * 10) >> 8 & 0xff; 
+
             can_mesg[4] = int16_t(id(power_tube_temperature).state * 10) & 0xff;
             can_mesg[5] = int16_t(id(power_tube_temperature).state * 10) >> 8 & 0xff;
+
             ESP_LOGI("main", "send can id: 0x356 hex: %x %x %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5]);
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5]};
       - delay: 10ms
@@ -271,15 +312,19 @@ interval:
           can_id: 0x35C
           data: !lambda |-
             uint8_t can_mesg[1];
-            if ((id(charging_switch).state) & (id(inverter_charging).state)) {
+            if ((id(charging_switch).state) 
+              & (id(inverter_charging).state)) {
                can_mesg[0] = 0x80;
             } else {
                can_mesg[0] = 0x00;
             }
-            if ((id(discharging_switch).state) & (id(inverter_discharging).state)) {
+
+            if ((id(discharging_switch).state) 
+              & (id(inverter_discharging).state)) {
                can_mesg[0] = can_mesg[0] | 0x40;
             }
             can_mesg[1] = 0x00;
+
             ESP_LOGI("main", "send can id: 0x35C hex: %x %x", can_mesg[0], can_mesg[1]);
             return {can_mesg[0], can_mesg[1]};
       - delay: 10ms
@@ -290,14 +335,19 @@ interval:
             int max_cell_voltage_i = id(max_cell_voltage).state * 100.0;
             int min_cell_voltage_i = id(min_cell_voltage).state * 100.0;
             uint8_t can_mesg[7];
+
             can_mesg[0] = int16_t(max(id(temperature_sensor_1).state, id(temperature_sensor_2).state)* 10) & 0xff;
             can_mesg[1] = int16_t(max(id(temperature_sensor_1).state, id(temperature_sensor_2).state)* 10) >> 8 & 0xff;
+
             can_mesg[2] = int16_t(min(id(temperature_sensor_1).state, id(temperature_sensor_2).state)* 10) & 0xff;
             can_mesg[3] = int16_t(min(id(temperature_sensor_1).state, id(temperature_sensor_2).state)* 10) >> 8 & 0xff;
+
             can_mesg[4] = max_cell_voltage_i & 0xff;
             can_mesg[5] = max_cell_voltage_i >> 8 & 0xff;
+
             can_mesg[6] = min_cell_voltage_i & 0xff;
             can_mesg[7] = min_cell_voltage_i >> 8 & 0xff;
+
             ESP_LOGI("main", "send can id: 0x70 hex: %x %x %x %x %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]);
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]};
       - delay: 10ms
@@ -306,14 +356,19 @@ interval:
           can_id: 0x371
           data: !lambda |-
             uint8_t can_mesg[7];
+
             can_mesg[0] = 0x01;
             can_mesg[1] = 0x00;
+
             can_mesg[2] = 0x02;
             can_mesg[3] = 0x00;
+
             can_mesg[4] = uint16_t(id(max_voltage_cell).state) & 0xff;
             can_mesg[5] = uint16_t(id(max_voltage_cell).state) >> 8 & 0xff;
+
             can_mesg[6] = uint16_t(id(min_voltage_cell).state) & 0xff;
             can_mesg[7] = uint16_t(id(min_voltage_cell).state) >> 8 & 0xff;
+
             ESP_LOGI("main", "send can id: 0x371 hex: %x %x %x %x %x %x %x %x", can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]);
             return {can_mesg[0], can_mesg[1], can_mesg[2], can_mesg[3], can_mesg[4], can_mesg[5], can_mesg[6], can_mesg[7]};
       - delay: 10ms
@@ -396,10 +451,10 @@ sensor:
       name: "${name} cell voltage 13"
     cell_voltage_14:
       name: "${name} cell voltage 14"
-    cell_voltage_15:
-      name: "${name} cell voltage 15"
-    cell_voltage_16:
-      name: "${name} cell voltage 16"
+#    cell_voltage_15:
+#      name: "${name} cell voltage 15"
+#    cell_voltage_16:
+#      name: "${name} cell voltage 16"
 #    cell_voltage_17:
 #      name: "${name} cell voltage 17"
 #    cell_voltage_18:
@@ -531,6 +586,7 @@ sensor:
       name: "${name} actual battery capacity"
 #    protocol_version:
 #      name: "${name} protocol version"
+
 # Uptime sensor
   - platform: uptime
     name: ${name} Uptime Sensor
@@ -573,6 +629,7 @@ text_sensor:
       name: "${name} manufacturer"
     total_runtime_formatted:
       name: "${name} total runtime formatted"
+
 # Template text sensors
   - platform: template
     name: ${name} Uptime Human Readable
