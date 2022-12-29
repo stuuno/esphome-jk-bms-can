@@ -14,23 +14,23 @@ substitutions:
 
 # --------------------------
 # Number of Battery modules max 8. Each LX U5.4-L battery is 5.4kWh, select the number closest to your capactiy eg 3.2V * 280Ah * 16 = 14.3kWh
-  batt_modules: "2"
+  batt_modules: "4"
 # --------------------------------------
 # Battery Charging setting:
 # This is max charging amps eg 50A, for Bulk - Constant Current charging(CC), should be at least 10A less than BMS change current protection, 0.5C max 
   charge_a: "40"
 # Absorption Voltage for Constant Voltage charging(CV). This is Absorption voltage you want the inverter to change with 55.2 eg 3.45v/cell for 16 cells 48V battery. 
-  absorption_v: "56"              # 4.00 x 14 = 56
+  absorption_v: "57.4"              # 4.1 x 14 = 57.4
 # Absorption time in minutes to hold charge voltage after charge voltage is reached eg 30
-  absorption_time: "30"
+  absorption_time: "20"
 # Rebulk offset, x Volts below absorption volatge battery will request rebulk, eg 55.2-3 = 52.5v, roughly 90% SOC.
-  rebulk_offset: "3"
+  rebulk_offset: "1.4"
 # --------------------------------------
 # Battery Discharge setting:
 # Max discharge amps eg 100, should be at least 10A less than BMS over dischange current protection, 0.5C max
   discharge_a: "40"
 # Minimum discharge voltage eg 48v/16 = 3V per cell
-  min_dischange_v: "45.5"         # 3.25 x 14 = 45.5
+  min_dischange_v: "46.2"         # 3.3 x 14 = 46.2
 # --------------------------------------
 # Battery State of Health (SOH) setting:
 # Maximum charging cycles is used to calculate the battey SOH, LF280K=6000.0 LF280=3000.0 (decimal is required)
@@ -233,27 +233,34 @@ interval:
             uint8_t can_mesg[7];
             if (!id(inverter_charging).state) {
                id(charge_status) = "Disabled";
+
             } else if (id(inverter_chg_on).state) {
                 id(charge_status) = "Bulk Manually";
+
             } else if ((id(inverter_charging).state) 
                     & (id(charge_status) == "Disabled")) {
                id(charge_status) = "Wait";
+
             } else if ((!id(inverter_chg_on).state) 
                     & (id(charge_status) == "Bulk Manually")) {
                id(charge_status) = "Wait";
+
             } else if (id(total_voltage).state <= (id(charging_voltage).state - ${rebulk_offset})) {  /// Bulk Charge eg 53.6v 10% 
                 if (id(absorption_script).is_running()) id(absorption_script).stop();
                 id(charge_status) = "Bulk";
+                      /// 54.8v                             56v                        1v
             } else if ((id(total_voltage).state > (id(charging_voltage).state - ${rebulk_offset})) 
                     & (id(total_voltage).state < (id(charging_voltage).state - 0.05))) {              /// If in startup rebulk
                      if (id(charge_status) == "Startup") {
                         id(charge_status) = "Bulk";                                                   /// If in startup, 10% low rebulk
                      }
+                      /// 54.8v                             56v                        1v
             } else if (id(total_voltage).state >= (id(charging_voltage).state  - 0.05)) {             /// 10 % from top start absorption timer
                      if (id(charge_status) == "Bulk") {
                         id(charge_status) = "Absorption";
                         if (!id(absorption_script).is_running()) id(absorption_script).execute();
                      }
+
             } else {
                 id(charge_status) = "Wait";
             }
@@ -302,9 +309,11 @@ interval:
           data: !lambda |-
             int soh = round(((id(charging_cycles).state/${max_cycles})-1)*-100);
             uint8_t can_mesg[3];
-
-            can_mesg[0] = uint16_t(id(capacity_remaining).state) & 0xff;        /// 15 & 0xff; 
-            can_mesg[1] = uint16_t(id(capacity_remaining).state) >> 8 & 0xff;   /// 15 >> 8 & 0xff; 
+            
+            /// can_mesg[0] = uint16_t(id(capacity_remaining).state) & 0xff;        /// 15 & 0xff; 
+            /// can_mesg[1] = uint16_t(id(capacity_remaining).state) >> 8 & 0xff;   /// 15 >> 8 & 0xff; 
+            can_mesg[0] = uint16_t(id(state_of_charge).state) & 0xff;        /// 15 & 0xff; 
+            can_mesg[1] = uint16_t(id(state_of_charge).state) >> 8 & 0xff;   /// 15 >> 8 & 0xff; 
 
             can_mesg[2] = soh & 0xff;
             can_mesg[3] = soh >> 8 & 0xff;
@@ -463,8 +472,8 @@ number:
     name: "${name} Absorption voltage"
     id: "charging_voltage"
     step: 0.1
-    min_value: 52.8
-    max_value: 57.6
+    min_value: 53
+    max_value: 58
     mode: slider
     initial_value: "${absorption_v}"
     unit_of_measurement: V
@@ -502,23 +511,23 @@ sensor:
     average_cell_voltage:
       name: "${name} average cell voltage"
     cell_voltage_1:
-      name: "${name} cell voltage 1"
+      name: "${name} cell voltage 01"
     cell_voltage_2:
-      name: "${name} cell voltage 2"
+      name: "${name} cell voltage 02"
     cell_voltage_3:
-      name: "${name} cell voltage 3"
+      name: "${name} cell voltage 03"
     cell_voltage_4:
-      name: "${name} cell voltage 4"
+      name: "${name} cell voltage 04"
     cell_voltage_5:
-      name: "${name} cell voltage 5"
+      name: "${name} cell voltage 05"
     cell_voltage_6:
-      name: "${name} cell voltage 6"
+      name: "${name} cell voltage 06"
     cell_voltage_7:
-      name: "${name} cell voltage 7"
+      name: "${name} cell voltage 07"
     cell_voltage_8:
-      name: "${name} cell voltage 8"
+      name: "${name} cell voltage 08"
     cell_voltage_9:
-      name: "${name} cell voltage 9"
+      name: "${name} cell voltage 09"
     cell_voltage_10:
       name: "${name} cell voltage 10"
     cell_voltage_11:
@@ -550,23 +559,23 @@ sensor:
     cell_voltage_24:
       name: "${name} cell voltage 24"
     cell_resistance_1:
-      name: "${name} cell resistance 1"
+      name: "${name} cell resistance 01"
     cell_resistance_2:
-      name: "${name} cell resistance 2"
+      name: "${name} cell resistance 02"
     cell_resistance_3:
-      name: "${name} cell resistance 3"
+      name: "${name} cell resistance 03"
     cell_resistance_4:
-      name: "${name} cell resistance 4"
+      name: "${name} cell resistance 04"
     cell_resistance_5:
-      name: "${name} cell resistance 5"
+      name: "${name} cell resistance 05"
     cell_resistance_6:
-      name: "${name} cell resistance 6"
+      name: "${name} cell resistance 06"
     cell_resistance_7:
-      name: "${name} cell resistance 7"
+      name: "${name} cell resistance 07"
     cell_resistance_8:
-      name: "${name} cell resistance 8"
+      name: "${name} cell resistance 08"
     cell_resistance_9:
-      name: "${name} cell resistance 9"
+      name: "${name} cell resistance 09"
     cell_resistance_10:
       name: "${name} cell resistance 10"
     cell_resistance_11:
@@ -619,6 +628,7 @@ sensor:
       id: power_tube_temperature
       name: "${name} power tube temperature"
     state_of_charge:
+      id: state_of_charge
       name: "${name} state of charge"
     capacity_remaining:
       id: capacity_remaining
