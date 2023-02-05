@@ -8,7 +8,8 @@
 ESPHome component to monitor a Jikong Battery Management System (JK-BMS) via RS485 or BLE
 
 ## This fork supports CAN bus communication with inverters supporting the CANBUS Protocol compatible with Pylontech V1.3 and Goodwe V1.5.
-Note Pylontech uses 15s/48v Goodwe uses 16s/51.2v @3.2v/cell nominal. 
+Note Pylontech uses 15s/48v Goodwe uses 16s/51.2v @3.2v/cell nominal.
+Other battery profiles that utilise the pylonton/goodwe protocol with differnt cell counts may also work, eg Alpha Ess Smile, BYD Battery-Box LV Flex Lite 
 Select the correct battery profile in the inverter to match your battery pack!
 
 The ESP32 communicates with the JK-BMS using the RS485 port(GPS) which is in fact not RS485, it is 3.3V TTL so it can be directly connected to the ESP32.
@@ -93,8 +94,9 @@ All JK-BMS models with software version `>=6.0` are using the implemented protoc
 ## Requirements
 
 * [ESPHome 2022.11.0 or higher](https://github.com/esphome/esphome/releases).
-* Generic ESP32, I use the esp32doit-devkit-v1
-* NOTE ESP32-S2 currently has issues with CAN BUS and does not work!
+* Generic ESP32, I use the esp32doit-devkit-v1   NOTE: ESP32-S2 currently has issues with CAN BUS and does not work!
+* TJA1050 CAN controller interface module and 4.7K resistor for 5v to 3.3v level shifing.
+* Optional: JK RS485 Adaptor and RS484 to TTL3.3v Adaptor (see optional schematic below)
 
 ## Schematics
 
@@ -106,13 +108,27 @@ All JK-BMS models with software version `>=6.0` are using the implemented protoc
 ```
                 RS485-TTL                   RS232-TTL                CAN BUS
 ┌──────────┐                ┌─────────┐                ┌─────────┐              ┌──────────┐
-│          │<----- RX ----->│         │<----- TX ----->|         |              |          |
-│  JK-BMS  │<----- TX ----->│  ESP32  │<----- RX -4K7->| TJA1050 |<---CAN H --->| Inverter |
+│          │<----- TX ----->│         │<----- TX ----->|         |              |          |
+│  JK-BMS  │<----- RX ----->│  ESP32  │<-4K7- RX ----->| TJA1050 |<---CAN H --->| Inverter |
 │          │<----- GND ---->│         │<----- GND ---->|   CAN   |<---CAN L --->|          |
 │          │      3.3V ---->│         │<----- 5V ----->|         |              |          |
 └──────────┘                └─────────┘                └─────────┘              └──────────┘
 
-# RS485-TTL jack (4 Pin, JST 1.25mm pitch)
+
+
+Optional, as seen in pic above: RS485 between JK-BMS and ESP32, uses JK RS485 adaptor and RS485 to TTL3.3v adaptor.
+
+              RS485-TTL                RS485                RS485-TTL                RS232-TTL                 CAN BUS
+┌──────────┐            ┌─────────┐            ┌─────────┐            ┌─────────┐              ┌─────────┐              ┌──────────┐
+│          │<--- TX --->│    JK   │<--- TX --->│         │<--- TX --->│         │<----- TX --->|         |              |          |
+│  JK-BMS  │<--- RX --->│  RS485  │<--- RX --->│  RS485  │<--- RX --->│  ESP32  │<-4K7- RX --->| TJA1050 |<---CAN H --->| Inverter |
+│          │<--- GND -->│ Adaptor │<--- GND -->│ To 3.3V │<--- GND -->|         |<----- GND -->|   CAN   |<---CAN L --->|          |
+│          │<--Bat V -->│         │            │         │<--- 3.3V-->|         |<----- 5V --->|         |              |          |
+└──────────┘            └─────────┘            └─────────┘            └─────────┘              └─────────┘              └──────────┘
+
+
+
+# RS485-TTL jack on JK-BMS (4 Pin, JST 1.25mm pitch)
 ┌─── ─────── ────┐
 │                │
 │ O   O   O   O  │
