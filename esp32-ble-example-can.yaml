@@ -241,6 +241,7 @@ interval:
                     & (id(charge_status) == "Disabled")) {
                id(charge_status) = "Wait";
 
+
             } else if ((!id(inverter_chg_on).state) 
                     & (id(charge_status) == "Bulk Manually")) {
                id(charge_status) = "Wait";
@@ -280,6 +281,7 @@ interval:
             }
 
             if (!id(inverter_charging).state) {                                                     /// Overides to disable charging
+
                can_mesg[0] = 0;
                can_mesg[1] = 0;
                can_mesg[2] = 0;
@@ -287,6 +289,7 @@ interval:
             }
 
             if (id(inverter_discharging).state) {
+
               can_mesg[4] = uint16_t(${discharge_a} * 10) & 0xff;
               can_mesg[5] = uint16_t(${discharge_a} * 10) >> 8 & 0xff;
             } else {
@@ -344,12 +347,14 @@ interval:
           data: !lambda |-
             uint8_t can_mesg[1];
             if (id(inverter_charging).state) {
+
                can_mesg[0] = 0x80;
             } else {
                can_mesg[0] = 0x00;
             }
 
             if (id(inverter_discharging).state) {
+
                can_mesg[0] = can_mesg[0] | 0x40;
             }
             can_mesg[1] = 0x00;
@@ -606,6 +611,7 @@ sensor:
       name: "${name} cell resistance 23"
     cell_resistance_24:
       name: "${name} cell resistance 24"
+
     total_voltage:
       id: total_voltage
       name: "${name} total voltage"
@@ -627,32 +633,36 @@ sensor:
     power_tube_temperature:
       id: power_tube_temperature
       name: "${name} power tube temperature"
+
     state_of_charge:
       id: state_of_charge
       name: "${name} state of charge"
     capacity_remaining:
       id: capacity_remaining
       name: "${name} capacity remaining"
+#    capacity_remaining_derived:
+#      name: "${name} capacity remaining derived"
+#    temperature_sensors:
+#      name: "${name} temperature sensors"
+
     total_battery_capacity_setting:
       name: "${name} total battery capacity setting"
     charging_cycles:
       name: "${name} charging cycles"
       id: charging_cycles
+
     total_charging_cycle_capacity:
       name: "${name} total charging cycle capacity"
+#    battery_strings:
+#      name: "${name} battery strings"
+    errors_bitmask:
+      id: errors_bitmask
+      name: "${name} errors bitmask"
+
     total_runtime:
       name: "${name} total runtime"
     balancing_current:
       name: "${name} balancing current"
-    errors_bitmask:
-      id: errors_bitmask
-      name: "${name} errors bitmask"
-#    capacity_remaining_derived:
-#      name: "${name} capacity remaining derived"
-#    temperature_sensors:
-#      name: "${name} temperature sensors"
-#    battery_strings:
-#      name: "${name} battery strings"
 #    operation_mode_bitmask:
 #      name: "${name} operation mode bitmask"
 #    total_voltage_overvoltage_protection:
@@ -755,22 +765,6 @@ text_sensor:
   - platform: jk_bms_ble
     errors:
       name: "${name} errors"
-    total_runtime_formatted:
-      name: "${name} total runtime formatted"
-
-# Template text sensors
-  - platform: template
-    name: ${name} Uptime Human Readable
-    id: uptime_human
-    icon: mdi:clock-start
-  - platform: template
-    name: "${name} Charging Status"
-    id: charging_status
-
-#text_sensor:
-#  - platform: jk_bms
-#    errors:
-#      name: "${name} errors"
 #    operation_mode:
 #      name: "${name} operation mode"
 #    battery_type:
@@ -783,22 +777,51 @@ text_sensor:
 #      name: "${name} software version"
 #    manufacturer:
 #      name: "${name} manufacturer"
-#    total_runtime_formatted:
-#      name: "${name} total runtime formatted"
+    total_runtime_formatted:
+      name: "${name} total runtime formatted"
+
+# Template text sensors
+  - platform: template
+    name: ${name} Uptime Human Readable
+    id: uptime_human
+    icon: mdi:clock-start
+  - platform: template
+    name: "${name} Charging Status"
+    id: charging_status
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+script:
+  - id: absorption_script
+    then:
+      - lambda: id(charge_status) = "Absorption";
+      - delay: ${absorption_time}min
+      - lambda: id(charge_status) = "Wait";
 
 switch:
-  - platform: jk_bms_ble
-    charging:
-      name: "${name} charging"
-    discharging:
-      name: "${name} discharging"
-    balancer:
-      name: "${name} balancer"
-
-  - platform: ble_client
-    ble_client_id: client0
-    name: "${name} enable bluetooth connection"
-
   - platform: template
     name: ${name} Charging enabled
     id: inverter_charging
@@ -812,9 +835,15 @@ switch:
     id: inverter_chg_on
     optimistic: true
 
-script:
-  - id: absorption_script
-    then:
-      - lambda: id(charge_status) = "Absorption";
-      - delay: ${absorption_time}min
-      - lambda: id(charge_status) = "Wait";
+  - platform: jk_bms_ble
+    charging:
+      name: "${name} charging"
+    discharging:
+      name: "${name} discharging"
+    balancer:
+      name: "${name} balancer"
+
+  - platform: ble_client
+    ble_client_id: client0
+    name: "${name} enable bluetooth connection"
+

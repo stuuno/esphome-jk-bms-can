@@ -5,9 +5,16 @@ substitutions:
 # name that will appear in esphome and homeassistant.
   name: jk-bms-can
   device_description: "Adapter between JK-BMS and Inverter"
+
+
+
+
+
+
+
 # --------------------------
 # Number of Battery modules max 8. Each LX U5.4-L battery is 5.4kWh, select the number closest to your capactiy eg 3.2V * 280Ah * 16 = 14.3kWh
-  batt_modules: "2"
+  batt_modules: "4"
 # --------------------------------------
 # Battery Charging setting:
 # This is max charging amps eg 50A, for Bulk - Constant Current charging(CC), should be at least 10A less than BMS change current protection, 0.5C max 
@@ -15,27 +22,29 @@ substitutions:
 # Absorption Voltage for Constant Voltage charging(CV). This is Absorption voltage you want the inverter to change with 55.2 eg 3.45v/cell for 16 cells 48V battery. 
   absorption_v: "56"              # 4.00 x 14 = 56
 # Absorption time in minutes to hold charge voltage after charge voltage is reached eg 30
-  absorption_time: "30"
+  absorption_time: "20"
 # Rebulk offset, x Volts below absorption volatge battery will request rebulk, eg 55.2-3 = 52.5v, roughly 90% SOC.
-  rebulk_offset: "3"
+  rebulk_offset: "1.4"
 # --------------------------------------
 # Battery Discharge setting:
 # Max discharge amps eg 100, should be at least 10A less than BMS over dischange current protection, 0.5C max
   discharge_a: "40"
 # Minimum discharge voltage eg 48v/16 = 3V per cell
-  min_dischange_v: "45.5"         # 3.25 x 14 = 45.5
+  min_dischange_v: "46.2"         # 3.3 x 14 = 46.2
 # --------------------------------------
 # Battery State of Health (SOH) setting:
 # Maximum charging cycles is used to calculate the battey SOH, LF280K=6000.0 LF280=3000.0 (decimal is required)
   max_cycles: "6000.0"
+
 # --------------------------------------
 # ESP32 CAN/Serail port pins:
 # GPIO pins your CAN bus transceiver(TJA1050) is connected to the ESP, note! TX->TX and RX->RX. 
-  can_tx_pin: GPIO23
-  can_rx_pin: GPIO22
+  can_tx_pin: GPIO23  # GPIO23
+  can_rx_pin: GPIO22  # GPIO22
 # GPIO pins your JK-BMS RS485(TTL) is connected to the ESP TX->RX and RX->TX. 
   tx_pin: GPIO17
   rx_pin: GPIO16
+
 # --------------------------------------
 #### Don't make changes below this ####
   external_components_source: github://stuuno/esphome-jk-bms-can@main
@@ -74,6 +83,11 @@ button:
     id: restart_button
     internal: true
 
+
+
+
+
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -86,12 +100,23 @@ logger:
 # if you use Home Assistant. The native API is more lightweight.
 api:
 
-mqtt:
-  broker: !secret mqtt_host
-  username: !secret mqtt_username
-  password: !secret mqtt_password
-  id: mqtt_client
-  topic_prefix: "emon/esphome"
+#mqtt:
+#  broker: !secret mqtt_host
+#  username: !secret mqtt_username
+#  password: !secret mqtt_password
+#  id: mqtt_client
+#  topic_prefix: "emon/esphome"
+
+
+
+
+
+
+
+
+
+
+
 
 
 output:
@@ -99,9 +124,9 @@ output:
     pin: 2
     id: led
     inverted: true
-  - platform: gpio
-    pin: 21
-    id: led2
+#  - platform: gpio
+#    pin: 21
+#    id: led2
 
 light:
   - platform: binary
@@ -109,11 +134,11 @@ light:
     id: led_buitin
     name: "Builtin LED"
     internal: true
-  - platform: binary
-    output: led2
-    id: led_ext
-    name: "External LED"
-    internal: true
+#  - platform: binary
+#    output: led2
+#    id: led_ext
+#    name: "External LED"
+#    internal: true
 
 uart:
   id: uart0
@@ -152,8 +177,8 @@ canbus:
 interval:
   - interval: 1000ms
     then:
-      - light.turn_on:
-          id: led_ext
+#      - light.turn_on:
+#          id: led_ext
 
       - canbus.send: # Warning, Alarms
           can_id: 0x359
@@ -208,28 +233,35 @@ interval:
             uint8_t can_mesg[7];
             if ((!id(charging_switch).state) | (!id(inverter_charging).state)) {
                id(charge_status) = "Disabled";
+
             } else if (id(inverter_chg_on).state) {
                 id(charge_status) = "Bulk Manually";
+
             } else if ((id(charging_switch).state) 
                     & (id(inverter_charging).state) 
                     & (id(charge_status) == "Disabled")) {
                id(charge_status) = "Wait";
+
             } else if ((!id(inverter_chg_on).state) 
                     & (id(charge_status) == "Bulk Manually")) {
                id(charge_status) = "Wait";
+
             } else if (id(total_voltage).state <= (id(charging_voltage).state - ${rebulk_offset})) {  /// Bulk Charge eg 53.6v 10% 
                 if (id(absorption_script).is_running()) id(absorption_script).stop();
                 id(charge_status) = "Bulk";
+                      /// 54.8v                             56v                        1v
             } else if ((id(total_voltage).state > (id(charging_voltage).state - ${rebulk_offset})) 
                     & (id(total_voltage).state < (id(charging_voltage).state - 0.05))) {              /// If in startup rebulk
                      if (id(charge_status) == "Startup") {
                         id(charge_status) = "Bulk";                                                   /// If in startup, 10% low rebulk
                      }
+                      /// 54.8v                             56v                        1v
             } else if (id(total_voltage).state >= (id(charging_voltage).state  - 0.05)) {             /// 10 % from top start absorption timer
                      if (id(charge_status) == "Bulk") {
                         id(charge_status) = "Absorption";
                         if (!id(absorption_script).is_running()) id(absorption_script).execute();
                      }
+
             } else {
                 id(charge_status) = "Wait";
             }
@@ -283,6 +315,8 @@ interval:
 
             can_mesg[0] = uint16_t(id(capacity_remaining).state) & 0xff;        /// 15 & 0xff; 
             can_mesg[1] = uint16_t(id(capacity_remaining).state) >> 8 & 0xff;   /// 15 >> 8 & 0xff; 
+
+
 
             can_mesg[2] = soh & 0xff;
             can_mesg[3] = soh >> 8 & 0xff;
@@ -405,8 +439,66 @@ binary_sensor:
     dedicated_charger_switch:
       name: "${name} dedicated charger switch"
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 sensor:
   - platform: jk_bms
+
     min_cell_voltage:
       id: min_cell_voltage
       name: "${name} min cell voltage"
@@ -471,15 +563,55 @@ sensor:
 #      name: "${name} cell voltage 23"
 #    cell_voltage_24:
 #      name: "${name} cell voltage 24"
-    power_tube_temperature:
-      id: power_tube_temperature
-      name: "${name} power tube temperature"
-    temperature_sensor_1:
-      id: temperature_sensor_1
-      name: "${name} temperature sensor 1"
-    temperature_sensor_2:
-      id: temperature_sensor_2
-      name: "${name} temperature sensor 2"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     total_voltage:
       id: total_voltage
       name: "${name} total voltage"
@@ -492,6 +624,19 @@ sensor:
       name: "${name} charging power"
     discharging_power:
       name: "${name} discharging power"
+    temperature_sensor_1:
+      id: temperature_sensor_1
+      name: "${name} temperature sensor 1"
+    temperature_sensor_2:
+      id: temperature_sensor_2
+      name: "${name} temperature sensor 2"
+    power_tube_temperature:
+      id: power_tube_temperature
+      name: "${name} power tube temperature"
+
+
+
+
     capacity_remaining:
       id: capacity_remaining
       name: "${name} capacity remaining"
@@ -499,9 +644,13 @@ sensor:
       name: "${name} capacity remaining derived"
     temperature_sensors:
       name: "${name} temperature sensors"
+
+    total_battery_capacity_setting:
+      name: "${name} total battery capacity setting"
     charging_cycles:
       name: "${name} charging cycles"
       id: charging_cycles
+    
     total_charging_cycle_capacity:
       name: "${name} total charging cycle capacity"
     battery_strings:
@@ -509,6 +658,11 @@ sensor:
     errors_bitmask:
       id: errors_bitmask
       name: "${name} errors bitmask"
+
+    total_runtime:
+      name: "${name} total runtime"
+
+
     operation_mode_bitmask:
       name: "${name} operation mode bitmask"
     total_voltage_overvoltage_protection:
@@ -566,8 +720,6 @@ sensor:
       name: "${name} discharging low temperature protection"
     discharging_low_temperature_recovery:
       name: "${name} discharging low temperature recovery"
-    total_battery_capacity_setting:
-      name: "${name} total battery capacity setting"
     current_calibration:
       name: "${name} current calibration"
     device_address:
@@ -578,8 +730,6 @@ sensor:
       name: "${name} alarm low volume"
     manufacturing_date:
       name: "${name} manufacturing date"
-    total_runtime:
-      name: "${name} total runtime"
 #    start_current_calibration:
 #      name: "${name} start current calibration"
     actual_battery_capacity:
