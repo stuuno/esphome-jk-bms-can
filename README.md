@@ -3,7 +3,7 @@
 ![GitHub stars](https://img.shields.io/github/stars/Uksa007/esphome-jk-bms-can)
 ![GitHub forks](https://img.shields.io/github/forks/Uksa007/esphome-jk-bms-can)
 ![GitHub watchers](https://img.shields.io/github/watchers/Uksa007/esphome-jk-bms-can)
-[!["Buy Me A Beer"](https://img.shields.io/badge/buy%20me%20a%20beer-donate-yellow.svg)](https://www.paypal.com/donate/?hosted_button_id=D2AULK7N5D242)
+[!["Support development"](https://img.shields.io/badge/support%20development-donate-yellow.svg)](https://www.patreon.com/Uksa007Codedevelopment)
 
 ESPHome component to monitor a Jikong Battery Management System (JK-BMS) via RS485 or BLE
 
@@ -28,7 +28,13 @@ Sends over CAN bus to inverter:
   - Alarms: Cell over/under voltage, Charge/discharge over current, High/low Temp, BMS fault
   - Charging logic: Complete rework of the charging logic, now charges with constant current(CC) to the absorption voltage, then has an absorption timer (Constant Voltage, user configurable time), with rebulk feature (user configurable offset from absorption voltage).
   
-Note:- Support for only one BMS CAN connection per inverter, see here for more info on creating [larger capacity packs](https://github.com/Uksa007/esphome-jk-bms-can/discussions/1#discussioncomment-4359340)
+Note:- Support for only one BMS CAN connection per inverter, see here for more info on creating [larger capacity packs](https://github.com/Uksa007/esphome-jk-bms-can/discussions/1#discussioncomment-4359340)<br>
+Early stages are under way to support multiple BMS, but need funding to purchase additional hardware, please consider supporting me if you would like to see this functionally, early access code with be made available in the Alpha testers membership once funding goals are reached: https://www.patreon.com/Uksa007Codedevelopment
+
+NOTE: ESP32 has a bug that causes WDT reboot if no other devices on CAN bus to ACK the packets.
+If you try to run without inverter it will not work as it will constantly WDT reboot!
+There is an early access beta version available that works around no inverter(CAN bus requires 2 devices to work)
+
 
 Home Assistant native integration via ESPHome:
 - Inverter control switches to manage inverter remotely
@@ -43,8 +49,14 @@ Each LX U5.4-L battery has 5.4kWh of storage, so select the number that is the c
 **Note:- I'm using this with my Goodwe GW5000S-BP inverter however CAN bus support is still in development and testing!!!**<br>
 Further deatils in the discussion tab https://github.com/Uksa007/esphome-jk-bms-can/discussions
 
-If you find this useful and would like to <a href="https://www.paypal.com/donate/?hosted_button_id=D2AULK7N5D242" target="_blank">buy me a beer here</a> thanks!
 
+If you find this useful and would like to suppport my work [!["Support development"](https://raw.githubusercontent.com/Uksa007/esphome-jk-bms-can/main/images/become_a_patron_button.png)](https://www.patreon.com/Uksa007Codedevelopment) here</a> thanks!
+
+
+<br>**NOTE: ESP32 has a bug that causes WDT reboot if no other devices on CAN bus to ACK the packets.<br>
+If you try to run without inverter to CAN bus it will NOT work as it will constantly WDT reboot!<br>
+There is an [early access beta version available](https://www.patreon.com/posts/beta-tester-code-78524976) that works around no inverter(CAN bus requires 2 devices to work).<br>
+If you would like to test without inverter connected, only the [beta version will work!](https://www.patreon.com/posts/beta-tester-code-78524976)**<br><br>
 
 
 * Connect a TJA1050 to an ESP32 (default GPIO 23 TX, 22 RX) as per https://esphome.io/components/canbus.html?highlight=can#wiring-options
@@ -132,12 +144,12 @@ Optional, as seen in pic above: RS485 between JK-BMS and ESP32, uses JK RS485 ad
 ┌─── ─────── ────┐
 │                │
 │ O   O   O   O  │
-│GND  RX  TX VBAT│
+│GND  RX  TX VBAT│ 
 └────────────────┘
-  │   │   │
-  │   │   └─── GPIO17 (`rx_pin`)
-  │   └─────── GPIO16 (`tx_pin`)
-  └─────────── GND
+  │   │   │   | VBAT is full battery volatge eg 51.2V (No connect)
+  │   │   └──── GPIO16 (`rx_pin`)
+  │   └──────── GPIO17 (`tx_pin`)
+  └──────────── GND
 ```
 
 
